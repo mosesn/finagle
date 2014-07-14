@@ -641,7 +641,16 @@ class NaggatiSpec extends SpecificationWithJUnit {
               }
             }
           }
-        }
+        } // set commands
+        "script commands" >> {
+          "EVAL" >> {
+            unwrap(codec(wrap("EVAL 'return {KEYS[1],KEYS[2],ARGV[1],ARGV[2]}' 2 foo bar baz boo\r\n"))) {
+              case Eval(script, numkeys, keys, args) => {
+                BytesToString(value.array) mustEqual "foo bar baz boo"
+              }
+            }
+          }
+        } // script commands
       } // inline
 
       def unwrap(list: Seq[AnyRef])(fn: PartialFunction[Command,Unit]) = list.toList match {
