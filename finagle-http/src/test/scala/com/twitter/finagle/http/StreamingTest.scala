@@ -4,10 +4,10 @@ import com.twitter.conversions.time._
 import com.twitter.finagle._
 import com.twitter.finagle.builder.{ClientBuilder, ServerBuilder}
 import com.twitter.finagle.dispatch.GenSerialClientDispatcher
-import com.twitter.finagle.transport.Transport
+import com.twitter.finagle.transport.{Transport, TransportProxy}
 import com.twitter.finagle.stats.StatsReceiver
 import com.twitter.io.{Buf, Reader, Writer}
-import com.twitter.util.{Await, Closable, Future, Promise}
+import com.twitter.util.{Await, Closable, Future, Promise, Time}
 import java.net.{InetSocketAddress, SocketAddress}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import org.jboss.netty.channel.Channel
@@ -104,17 +104,49 @@ class StreamingTest extends FunSuite with Eventually {
   })
 
   test("client: server disconnect on pending response should fail request") {
-    val fail = new Promise[Unit]
-    val server = startServer(neverRespond, transport => {
-      if (!fail.isDefined) fail.ensure { transport.close() }
+    // flaky -- does not fail realiably
+    (0 to 99).foreach { _ =>
+      val fail = new Promise[Unit]
+      val server = startServer(neverRespond, transport => {
+        if (!fail.isDefined) fail.ensure { transport.close() }
+        transport
+      })
+      val client = connect(server.boundAddress, identity)
+
+      val resF = client(get("/"))
+      assert(!resF.isDefined)
+      fail.setDone()
+      intercept[ChannelClosedException] { await(resF) }
+
+      await(client.close())
+      await(server.close())
+    }
+  }
+
+  test("client: client closes transport after server disconnects") {
+    val serverClose, clientClosed = new Promise[Unit]
+    val service = Service.mk[Request, Response] { req =>
+      Future.value(Response())
+    }
+    val server = startServer(service, transport => {
+      if (!serverClose.isDefined) serverClose.ensure { transport.close() }
       transport
     })
-    val client = connect(server.boundAddress, identity)
+    val client = connect(server.boundAddress, transport => {
+      new TransportProxy(transport) {
+        def read() = transport.read()
+        def write(m: Any) = transport.write(m)
+        override def close(t: Time) = {
+          clientClosed.setDone()
+          transport.close(t)
+        }
+      }
+    })
 
-    val resF = client(get("/"))
-    assert(!resF.isDefined)
-    fail.setDone()
-    intercept[ChannelClosedException] { await(resF) }
+    val res = await(client(get("/")))
+    assert(await(res.reader.read(1)) == None)
+    serverClose.setDone()
+    await(clientClosed)
   }
 
   test("client: fail request writer") (new ClientCtx {
