@@ -103,6 +103,20 @@ class StreamingTest extends FunSuite with Eventually {
     assertSecondRequestOk()
   })
 
+  test("client: server disconnect on pending response should fail request") {
+    val fail = new Promise[Unit]
+    val server = startServer(neverRespond, transport => {
+      if (!fail.isDefined) fail.ensure { transport.close() }
+      transport
+    })
+    val client = connect(server.boundAddress, identity)
+
+    val resF = client(get("/"))
+    assert(!resF.isDefined)
+    fail.setDone()
+    intercept[ChannelClosedException] { await(resF) }
+  }
+
   test("client: fail request writer") (new ClientCtx {
     val exc = new Exception
     req.writer.fail(exc)
@@ -301,6 +315,7 @@ object StreamingTest {
   val echo = new Service[Request, Response] {
     def apply(req: Request) = Future.value(ok(req.reader))
   }
+  val neverRespond = Service.mk[Request, Response] { _ => Future.never }
 
   def get(uri: String) = {
     val req = Request(uri)
