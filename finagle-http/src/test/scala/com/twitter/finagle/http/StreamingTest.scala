@@ -373,13 +373,15 @@ object StreamingTest {
       .name("server")
       .build(service)
 
-  def connect(addr: SocketAddress, mod: Modifier, name: String = "client") =
-    ClientBuilder()
+  def connect(addr: SocketAddress, mod: Modifier, name: String = "client") = {
+    val fac = ClientBuilder()
       .codec(new Custom(mod, identity))
       .hosts(Seq(addr.asInstanceOf[InetSocketAddress]))
       .hostConnectionLimit(1)
       .name(name)
-      .build()
+      .buildFactory()
+    await(fac)
+  }
 
   class Custom(cmod: Modifier, smod: Modifier)
     extends CodecFactory[Request, Response] {
