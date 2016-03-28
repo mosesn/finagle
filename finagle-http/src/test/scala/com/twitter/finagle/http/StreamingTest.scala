@@ -4,7 +4,7 @@ import com.twitter.conversions.time._
 import com.twitter.finagle._
 import com.twitter.finagle.builder.{ClientBuilder, ServerBuilder}
 import com.twitter.finagle.dispatch.GenSerialClientDispatcher
-import com.twitter.finagle.transport.{Transport, TransportProxy}
+import com.twitter.finagle.transport.Transport
 import com.twitter.finagle.stats.StatsReceiver
 import com.twitter.io.{Buf, Reader, Writer}
 import com.twitter.util.{Await, Closable, Future, Promise, Time}
@@ -133,14 +133,8 @@ class StreamingTest extends FunSuite with Eventually {
       transport
     })
     val client = connect(server.boundAddress, transport => {
-      new TransportProxy(transport) {
-        def read() = transport.read()
-        def write(m: Any) = transport.write(m)
-        override def close(t: Time) = {
-          clientClosed.setDone()
-          transport.close(t)
-        }
-      }
+      clientClosed.become(transport.onClose.unit)
+      transport
     })
 
     val res = await(client(get("/")))
