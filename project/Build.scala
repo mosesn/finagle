@@ -283,8 +283,7 @@ object Finagle extends Build {
       util("codec"),
       util("core"),
       util("codec"),
-      util("stats"),
-      netty4StaticSsl
+      util("stats")
     ) ++ netty4Libs
   ).dependsOn(finagleCore, finagleToggle)
 
@@ -427,7 +426,8 @@ object Finagle extends Build {
       util("collection"),
       util("logging"),
       "commons-lang" % "commons-lang" % "2.6",
-      guavaLib
+      guavaLib,
+      netty4StaticSsl % "test"
     )
   ).dependsOn(finagleBaseHttp, finagleNetty4Http, finagleHttp2, finagleToggle)
 
